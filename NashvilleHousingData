@@ -1,7 +1,7 @@
 /*
 ===============================================================================================
 Portfolio Project: Nashville Housing Data Cleaning Pipeline
-Analytical Data Scrubbing, Parsing, and Standardization
+Script 02: Analytical Data Scrubbing, Parsing, and Standardization
 Database Engine: Microsoft SQL Server (SSMS)
 Author: Vaibhav
 ===============================================================================================
@@ -17,6 +17,7 @@ GO
 ALTER TABLE Nashville_Housing_Data ALTER COLUMN SaleDate DATE;
 GO
 
+-- [VALIDATION 1] Confirm data type converted and dates display uniformly
 SELECT TOP 5 SaleDate 
 FROM Nashville_Housing_Data;
 GO
@@ -68,9 +69,8 @@ SELECT TOP 5 PropertyAddress, PropertySplitAddress, PropertySplitCity
 FROM Nashville_Housing_Data;
 GO
 
-
 -- =============================================================================================
--- STEP 4: Add structural columns safely only if they do not exist yet
+-- Step 4A: Add columns safely only if they do not exist yet
 -- =============================================================================================
 IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Nashville_Housing_Data') AND name = 'OwnerSplitAddress')
 BEGIN
@@ -80,15 +80,16 @@ BEGIN
 END;
 GO
 
--- Step 4B: Tokenize multi-delimited owner data strings using PARSENAME
--- PARSENAME evaluates periods backward, so we switch commas with periods
+-- =============================================================================================
+-- Step 4B: Tokenize multi-delimited owner data strings
+-- =============================================================================================
 UPDATE Nashville_Housing_Data
 SET OwnerSplitAddress = PARSENAME(REPLACE(OwnerAddress, ',', '.'), 3),
     OwnerSplitCity = LTRIM(PARSENAME(REPLACE(OwnerAddress, ',', '.'), 2)),
     OwnerSplitState = LTRIM(PARSENAME(REPLACE(OwnerAddress, ',', '.'), 1));
 GO
 
--- [VALIDATION 4] Confirm proper side-by-side parsing (Raw vs. Clean comparison)
+-- [VALIDATION 4] Confirm side-by-side structural parsing success
 SELECT TOP 5 OwnerAddress, OwnerSplitAddress, OwnerSplitCity, OwnerSplitState 
 FROM Nashville_Housing_Data;
 GO
