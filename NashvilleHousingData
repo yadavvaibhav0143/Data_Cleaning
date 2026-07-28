@@ -1,166 +1,157 @@
+/*
+===============================================================================================
+Portfolio Project: Nashville Housing Data Cleaning Pipeline
+Analytical Data Scrubbing, Parsing, and Standardization
+Database Engine: Microsoft SQL Server (SSMS)
+Author: Vaibhav
+===============================================================================================
+*/
 
-------Cleaning Data in Sql Queries
+USE [Portfolio Project];
+GO
 
-Select*
-from NashvilleHousingData
+-- =============================================================================================
+-- STEP 1: STANDARDIZE DATE FORMATS
+-- =============================================================================================
 
---Sandardize Date Format
+ALTER TABLE Nashville_Housing_Data ALTER COLUMN SaleDate DATE;
+GO
 
-Select SaledateConverted
-from NashvilleHousingData
-
---Steps
-
-update NashvilleHousingData
-set SaleDate = Convert(Date, SaleDate)
-
-Alter table NashvilleHousingData
-add SaleDateConverted date
-
-update NashvilleHousingData
-set SaleDateConverted = Convert(Date, SaleDate)
-
-
---Populate Property Address Data
-
-select *
-from [Portfolio Project]..nashvillehousingdata
-where Propertyaddress is null
-
---Steps
-
-select a.parcelID, a.propertyaddress, b.parcelID, b.propertyaddress, isnull(a.propertyaddress, b.propertyaddress)
-from [Portfolio Project]..nashvillehousingdata as A
-join [Portfolio Project]..nashvillehousingdata as B
-on a.parcelID = B.parcelID AND 
-   a.UniqueID <> b.uniqueid
-where a.propertyaddress is null
-
- update A
- set PropertyAddress = isnull(a.propertyaddress, b.propertyaddress)
- from [Portfolio Project]..nashvillehousingdata as A
-join [Portfolio Project]..nashvillehousingdata as B
-on a.parcelID = B.parcelID AND 
-   a.UniqueID <> b.uniqueid
- where a.propertyaddress is null
+SELECT TOP 5 SaleDate 
+FROM Nashville_Housing_Data;
+GO
 
 
- --Breaking out Property/Owner Address into Individual Columns (Address, City, State)
+-- =============================================================================================
+-- STEP 2: POPULATE MISSING PROPERTY ADDRESS DATA
+-- =============================================================================================
 
- Select propertyaddress, SUBSTRING(propertyaddress, 1,  CHARINDEX(',', propertyaddress)-1) as Property_Address, 
- substring(PropertyAddress, CHARINDEX(',', propertyaddress)+1, len(propertyaddress)) as Property_City
- from [Portfolio Project]..nashvillehousingdata
- order by 1
+UPDATE a
+SET PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress)
+FROM Nashville_Housing_Data a
+JOIN Nashville_Housing_Data b
+	ON a.ParcelID = b.ParcelID
+	AND a.UniqueID <> b.UniqueID
+WHERE a.PropertyAddress IS NULL OR a.PropertyAddress = '';
+GO
 
- --Property_Address
-
- alter table [Portfolio Project]..nashvillehousingdata
- add Property_Address nvarchar(255)
-
- update [Portfolio Project]..nashvillehousingdata
- set Property_Address = SUBSTRING(propertyaddress, 1,  CHARINDEX(',', propertyaddress)-1)
-
- --Property_City
-
- alter table [Portfolio Project]..nashvillehousingdata
- add Property_City nvarchar(255)
-
- update [Portfolio Project]..nashvillehousingdata
- set Property_City = substring(PropertyAddress, CHARINDEX(',', propertyaddress)+1, len(propertyaddress))
-
- Select *
- from [Portfolio Project]..nashvillehousingdata
-
- --OwnerAddress
-
- Select owneraddress
- from [Portfolio Project]..nashvillehousingdata
- where OwnerAddress is not null
-
-Select owneraddress,
-parsename(replace(owneraddress, ',','.'),3) Address,
-parsename(replace(owneraddress, ',','.'),2) City,
-parsename(replace(owneraddress, ',','.'),1) State
-from [Portfolio Project]..nashvillehousingdata
-where OwnerAddress is not null
-
---Owner_Add
-
-alter table [Portfolio Project]..nashvillehousingdata
- add Owner_Add nvarchar(255)
-
- update [Portfolio Project]..nashvillehousingdata
- set  Owner_Add = parsename(replace(owneraddress, ',','.'),3)
-
- --Owner_City
-
- alter table [Portfolio Project]..nashvillehousingdata
- add Owner_City nvarchar(255)
-
- update [Portfolio Project]..nashvillehousingdata
- set  Owner_City = parsename(replace(owneraddress, ',','.'),2)
-
- --Owner_State
-
- alter table [Portfolio Project]..nashvillehousingdata
- add Owner_State nvarchar(255)
-
- update [Portfolio Project]..nashvillehousingdata
- set  Owner_State = parsename(replace(owneraddress, ',','.'),1)
-
- Select *
- from [Portfolio Project]..nashvillehousingdata
+-- [VALIDATION 2] Verify that no unpopulated or blank Property Addresses remain
+SELECT COUNT(*) AS UnpopulatedAddresses 
+FROM Nashville_Housing_Data 
+WHERE PropertyAddress IS NULL OR PropertyAddress = '';
+GO
 
 
- --Change Y & N to Yes and No in "Sold as Vacante" field
+-- =============================================================================================
+-- STEP 3: PARSE PROPERTY ADDRESS (Street, City)
+-- =============================================================================================
 
- select distinct(SoldAsVacant)
- from [Portfolio Project]..nashvillehousingdata
- order by 1
+ALTER TABLE Nashville_Housing_Data ADD PropertySplitAddress VARCHAR(200);
+ALTER TABLE Nashville_Housing_Data ADD PropertySplitCity VARCHAR(100);
+GO
 
- select SoldAsVacant,
- case
- when SoldAsVacant = 'N' then 'No' 
- when SoldAsVacant = 'Y' then 'Yes'
- else SoldAsVacant
- end 
- from [Portfolio Project]..nashvillehousingdata
+UPDATE Nashville_Housing_Data
+SET PropertySplitAddress = CASE 
+        WHEN PropertyAddress IS NULL OR PropertyAddress = '' THEN NULL
+        WHEN CHARINDEX(',', PropertyAddress) = 0 THEN PropertyAddress
+        ELSE SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) - 1) 
+    END,
+    PropertySplitCity = CASE 
+        WHEN PropertyAddress IS NULL OR PropertyAddress = '' THEN NULL 
+        WHEN CHARINDEX(',', PropertyAddress) = 0 THEN NULL 
+        ELSE LTRIM(SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) + 1, LEN(PropertyAddress))) 
+    END;
+GO
 
- update [Portfolio Project]..nashvillehousingdata
- set SoldAsVacant = case
- when SoldAsVacant = 'N' then 'No' 
- when SoldAsVacant = 'Y' then 'Yes'
- else SoldAsVacant
- end 
- from [Portfolio Project]..nashvillehousingdata
-
- 
- --Remove Duplicates
-
- Select *, 
- ROW_NUMBER() over (partition by Parcelid,
- Propertyaddress, 
- saleprice, 
- Legalreference order by UniqueId) Row_Num
- from [Portfolio Project]..nashvillehousingdata
-
- with Row_NumCTE AS(
- Select *, 
- ROW_NUMBER() over (partition by Parcelid,
- Propertyaddress, 
- saleprice, 
- Legalreference order by UniqueId) Row_Num
- from [Portfolio Project]..nashvillehousingdata
- )
-Delete 
-from Row_NumCTE
-where Row_Num = 2
+-- [VALIDATION 3] Confirm side-by-side structural parsing success (Comparing Raw vs. Clean)
+SELECT TOP 5 PropertyAddress, PropertySplitAddress, PropertySplitCity 
+FROM Nashville_Housing_Data;
+GO
 
 
---Delete Unused Columns
+-- =============================================================================================
+-- STEP 4: Add structural columns safely only if they do not exist yet
+-- =============================================================================================
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Nashville_Housing_Data') AND name = 'OwnerSplitAddress')
+BEGIN
+    ALTER TABLE Nashville_Housing_Data ADD OwnerSplitAddress VARCHAR(200);
+    ALTER TABLE Nashville_Housing_Data ADD OwnerSplitCity VARCHAR(100);
+    ALTER TABLE Nashville_Housing_Data ADD OwnerSplitState VARCHAR(50);
+END;
+GO
 
-Select *
-from [Portfolio Project]..nashvillehousingdata
+-- Step 4B: Tokenize multi-delimited owner data strings using PARSENAME
+-- PARSENAME evaluates periods backward, so we switch commas with periods
+UPDATE Nashville_Housing_Data
+SET OwnerSplitAddress = PARSENAME(REPLACE(OwnerAddress, ',', '.'), 3),
+    OwnerSplitCity = LTRIM(PARSENAME(REPLACE(OwnerAddress, ',', '.'), 2)),
+    OwnerSplitState = LTRIM(PARSENAME(REPLACE(OwnerAddress, ',', '.'), 1));
+GO
 
-Alter table [Portfolio Project]..nashvillehousingdata
-drop column saledate, taxdistrict, saledateconverted5
+-- [VALIDATION 4] Confirm proper side-by-side parsing (Raw vs. Clean comparison)
+SELECT TOP 5 OwnerAddress, OwnerSplitAddress, OwnerSplitCity, OwnerSplitState 
+FROM Nashville_Housing_Data;
+GO
+
+
+-- =============================================================================================
+-- STEP 5: STANDARDIZE BOOLEAN EXPRESSIONS (SoldAsVacant)
+-- =============================================================================================
+
+UPDATE Nashville_Housing_Data
+SET SoldAsVacant = CASE 
+    WHEN SoldAsVacant = 'Y' THEN 'Yes'
+    WHEN SoldAsVacant = 'N' THEN 'No'
+    ELSE SoldAsVacant
+END;
+GO
+
+-- [VALIDATION 5] Audit the categorical field to prove only uniform outputs ('Yes', 'No') remain
+SELECT DISTINCT SoldAsVacant, COUNT(SoldAsVacant) as ItemCount
+FROM Nashville_Housing_Data
+GROUP BY SoldAsVacant;
+GO
+
+
+-- =============================================================================================
+-- STEP 6: REMOVE DUPLICATE RECORDS
+-- =============================================================================================
+
+WITH RowNumCTE AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY ParcelID, 
+                         PropertyAddress, 
+                         SalePrice, 
+                         SaleDate, 
+                         LegalReference
+            ORDER BY UniqueID
+        ) as row_num
+    FROM Nashville_Housing_Data
+)
+DELETE FROM RowNumCTE
+WHERE row_num > 1;
+GO
+
+-- [VALIDATION 6] Re-run window check to guarantee zero overlapping keys remain
+WITH DuplicateAuditCTE AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY ParcelID, PropertyAddress, SalePrice, SaleDate, LegalReference
+            ORDER BY UniqueID
+        ) as row_num
+    FROM Nashville_Housing_Data
+)
+SELECT COUNT(*) AS RemainingDuplicates 
+FROM DuplicateAuditCTE 
+WHERE row_num > 1;
+GO
+
+
+-- =============================================================================================
+-- STEP 7: PRODUCTION READY VIEW
+-- Note: Raw columns are explicitly preserved to demonstrate parsing transform capability
+-- =============================================================================================
+
+SELECT * FROM Nashville_Housing_Data;
+GO
