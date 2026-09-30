@@ -1,7 +1,7 @@
 /*
 ===============================================================================================
 Portfolio Project: Nashville Housing Data Cleaning Pipeline
-Script 02: Analytical Data Scrubbing, Parsing, and Standardization
+Script 02: Data Cleaning, Parsing, and Standardization
 Database Engine: Microsoft SQL Server (SSMS)
 Author: Vaibhav
 ===============================================================================================
@@ -28,18 +28,23 @@ GO
 -- =============================================================================================
 
 UPDATE a
-SET PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress)
+SET PropertyAddress = COALESCE(
+        NULLIF(LTRIM(RTRIM(a.PropertyAddress)), ''),
+        b.PropertyAddress
+    )
 FROM Nashville_Housing_Data a
 JOIN Nashville_Housing_Data b
-	ON a.ParcelID = b.ParcelID
-	AND a.UniqueID <> b.UniqueID
-WHERE a.PropertyAddress IS NULL OR a.PropertyAddress = '';
+    ON a.ParcelID = b.ParcelID
+    AND a.UniqueID <> b.UniqueID
+WHERE a.PropertyAddress IS NULL
+   OR LTRIM(RTRIM(a.PropertyAddress)) = '';
 GO
 
 -- [VALIDATION 2] Verify that no unpopulated or blank Property Addresses remain
-SELECT COUNT(*) AS UnpopulatedAddresses 
-FROM Nashville_Housing_Data 
-WHERE PropertyAddress IS NULL OR PropertyAddress = '';
+SELECT COUNT(*) AS UnpopulatedAddresses
+FROM Nashville_Housing_Data
+WHERE PropertyAddress IS NULL
+   OR LTRIM(RTRIM(PropertyAddress)) = '';
 GO
 
 
@@ -96,7 +101,7 @@ GO
 
 
 -- =============================================================================================
--- STEP 5: STANDARDIZE BOOLEAN EXPRESSIONS (SoldAsVacant)
+-- STEP 5: STANDARDIZE SOLD-AS-VACANT CATEGORICAL VALUES
 -- =============================================================================================
 
 UPDATE Nashville_Housing_Data
@@ -115,7 +120,8 @@ GO
 
 
 -- =============================================================================================
--- STEP 6: REMOVE DUPLICATE RECORDS
+-- STEP 6: REMOVE DUPLICATES BASED ON BUSINESS-KEY FIELDS
+-- Retain the lowest UniqueID and remove subsequent duplicate records.
 -- =============================================================================================
 
 WITH RowNumCTE AS (
@@ -150,9 +156,10 @@ GO
 
 
 -- =============================================================================================
--- STEP 7: PRODUCTION READY VIEW
--- Note: Raw columns are explicitly preserved to demonstrate parsing transform capability
+-- STEP 7: FINAL CLEANED DATA OUTPUT
+-- Final output of the cleaned and standardized dataset
 -- =============================================================================================
 
-SELECT * FROM Nashville_Housing_Data;
+SELECT * 
+FROM Nashville_Housing_Data;
 GO
