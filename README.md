@@ -25,6 +25,16 @@ The following data cleaning tasks were performed:
 - Identified and removed duplicate records using `ROW_NUMBER()` and Common Table Expressions (CTE).
 - Validated each transformation using SQL queries to verify the results.
 
+## Data Quality Checks
+
+Validation queries were included after each major transformation to verify that:
+
+- `SaleDate` was converted to the `DATE` data type.
+- Missing `PropertyAddress` values were populated where a matching `ParcelID` had a valid address.
+- Property and owner address components were populated correctly.
+- `SoldAsVacant` values were standardized from `Y/N` to `Yes/No`.
+- Duplicate records based on the defined business-key fields were removed.
+
 ## SQL Concepts Used
 
 - UPDATE
